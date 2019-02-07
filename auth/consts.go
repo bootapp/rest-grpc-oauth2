@@ -1,8 +1,12 @@
-package rest_grpc_oauth2
+package auth
+
+import "time"
+
 const (
 	AccessTokenMdKey = "x-cookie-access"
 	RefreshTokenMdKey = "x-cookie-refresh"
 	AccessTokenCookieKey = "access_token"
 	RefreshTokenCookieKey = "refresh_token"
 	BearerAuthorizationTokenKey = "Authorization"
+	RefreshWindow = time.Second * 30
 )

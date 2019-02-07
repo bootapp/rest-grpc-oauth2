@@ -1,12 +1,12 @@
-package rest_grpc_oauth2
+package auth
 
 import (
 	"context"
 	"github.com/golang/protobuf/proto"
 	"github.com/grpc-ecosystem/grpc-gateway/runtime"
 	"google.golang.org/grpc/metadata"
+	"log"
 	"net/http"
-	"strings"
 	"time"
 )
 func FirstTrailerMdWithName(md runtime.ServerMetadata, name string) string {
@@ -44,23 +44,32 @@ func GatewayResponseCookieAnnotator(ctx context.Context, response http.ResponseW
 	}
 	return nil
 }
-func GatewayRequestCookieParser(_ context.Context, req *http.Request) metadata.MD {
-	var resMD metadata.MD
+func GatewayRequestCookieParser(_ context.Context, req *http.Request) (resMD metadata.MD) {
+	var accessToken, refreshToken string
 	accessCookie, err := req.Cookie(AccessTokenCookieKey)
-	if err == nil && accessCookie != nil {
-		resMD = metadata.Pairs(AccessTokenMdKey, accessCookie.Value)
+	if err ==nil && accessCookie != nil {
+		accessToken = accessCookie.Value
 	} else {
-		accessToken := req.Header.Get(BearerAuthorizationTokenKey)
-		if accessToken != "" {
-			resMD = metadata.Pairs(AccessTokenMdKey, strings.TrimPrefix(accessToken, "Bearer "))
-		}
+		accessToken = req.Header.Get(BearerAuthorizationTokenKey)
 	}
 	refreshCookie, err := req.Cookie(RefreshTokenCookieKey)
-	if err == nil && refreshCookie != nil{
-		if resMD == nil {
-			resMD = metadata.Pairs(RefreshTokenMdKey, refreshCookie.Value)
+	if err == nil && refreshCookie != nil {
+		refreshToken = refreshCookie.Value
+	}
+
+	if refreshToken != "" {
+		authenticator := GetInstance()
+		if authenticator != nil {
+			accessToken, refreshToken = authenticator.RefreshTokenIfNeeded(accessToken, refreshToken)
 		} else {
-			resMD.Append(RefreshTokenMdKey, refreshCookie.Value)
+			log.Fatal("no oauth authenticator configured")
+		}
+	}
+
+	if accessToken != "" {
+		resMD = metadata.Pairs(AccessTokenMdKey, accessToken)
+		if refreshToken != "" {
+			resMD.Append(RefreshTokenMdKey, refreshToken)
 		}
 	}
 	return resMD
