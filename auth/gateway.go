@@ -60,14 +60,22 @@ func GatewayRequestCookieParser(_ context.Context, req *http.Request) (resMD met
 	if refreshToken != "" {
 		authenticator := GetInstance()
 		if authenticator != nil {
-			accessToken, refreshToken = authenticator.RefreshTokenIfNeeded(accessToken, refreshToken)
+			var refreshed bool
+			accessToken, refreshToken, refreshed = authenticator.RefreshTokenIfNeeded(accessToken, refreshToken)
+			if refreshed {
+				resMD = metadata.Pairs(TokenRefreshed, "1")
+			}
 		} else {
 			log.Fatal("no oauth authenticator configured")
 		}
 	}
 
 	if accessToken != "" {
-		resMD = metadata.Pairs(AccessTokenMdKey, accessToken)
+		if resMD == nil {
+			resMD = metadata.Pairs(AccessTokenMdKey, accessToken)
+		} else {
+			resMD.Append(AccessTokenMdKey, accessToken)
+		}
 		if refreshToken != "" {
 			resMD.Append(RefreshTokenMdKey, refreshToken)
 		}

@@ -69,53 +69,63 @@ func (s *StatelessAuthenticator) GetTokenInfo(token string) (oauth2.TokenInfo, e
 	}
 	return ti, nil
 }
-func (s *StatelessAuthenticator) RefreshTokenIfNeeded(accessToken string, refreshToken string) (string, string) {
+func (s *StatelessAuthenticator) RefreshTokenIfNeeded(accessToken string, refreshToken string) (string, string, bool) {
 	if refreshToken == "" {
-		return accessToken, refreshToken
+		return accessToken, refreshToken, false
 	}
 	accessTI, err := s.GetTokenInfo(accessToken)
 	// no need to refresh
 	if err == nil && time.Now().Add(RefreshWindow).Before(accessTI.GetExpiresAt()){
-		return accessToken, refreshToken
+		return accessToken, refreshToken, false
 	}
 	// need refresh
 	refreshTI, err := s.GetTokenInfo(refreshToken)
 	if err == nil && time.Now().Before(refreshTI.GetExpiresAt()) {
 		newAccessToken, newRefreshToken, err := s.UserRefreshToken(refreshToken)
 		if err == nil {
-			return newAccessToken, newRefreshToken
+			return newAccessToken, newRefreshToken, true
 		}
 	}
-	return accessToken, refreshToken
+	return accessToken, refreshToken, false
 
 }
-func (s *StatelessAuthenticator) HasRole(accessToken string, role string) (userId int64, hasRole bool)  {
+func (s *StatelessAuthenticator) HasRole(ctx context.Context, role string) (userId int64, orgId int64, hasRole bool)  {
+	accessToken, isAuth := s.IsAuthenticated(ctx)
+	if !isAuth {
+		return
+	}
+	userId, orgId, hasRole = 0, 0, false
 	ti, err := s.GetTokenInfo(accessToken)
 	if err != nil {
-		return 0, false
+		return
 	}
 	if ti.GetExpiresAt().Before(time.Now()) {
-		return 0,false
+		return
 	}
 	authorities := ti.GetAuthorities()
+	userId, err = strconv.ParseInt(ti.GetUserID(), 10, 64)
+	if err != nil {
+		return
+	}
+	orgId, err = strconv.ParseInt(ti.GetOrgID(), 10, 64)
+	if err != nil {
+		return
+	}
 	for idx := range authorities {
 		if role == authorities[idx] {
-			userId, err = strconv.ParseInt(ti.GetUserID(), 10, 64)
-			if err != nil {
-				return 0, false
-			}
-			return userId,true
+			hasRole = true
+			break
 		}
 	}
-	return 0, false
+	return
 }
-func (a *StatelessAuthenticator) IsAuthenticated(ctx context.Context) (userId int64, isAuth bool) {
-	userId,isAuth = 0, false
+func (a *StatelessAuthenticator) IsAuthenticated(ctx context.Context) (accessToken string, isAuth bool) {
+	accessToken, isAuth = "", false
 	md, ok := metadata.FromIncomingContext(ctx)
 	if !ok {
 		return
 	}
-	accessToken := FirstIncomingHeaderMdWithName(md, AccessTokenMdKey)
+	accessToken = FirstIncomingHeaderMdWithName(md, AccessTokenMdKey)
 	ti, err := a.GetTokenInfo(accessToken)
 	if err != nil {
 		return
@@ -123,11 +133,12 @@ func (a *StatelessAuthenticator) IsAuthenticated(ctx context.Context) (userId in
 	if ti.GetExpiresAt().Before(time.Now()) {
 		return
 	}
-	userId, err = strconv.ParseInt(ti.GetUserID(), 10, 64)
-	if err != nil {
-		return
-	}
 	isAuth = true
+	refreshed := FirstIncomingHeaderMdWithName(md, TokenRefreshed)
+	if refreshed != "" {
+		refreshToken := FirstIncomingHeaderMdWithName(md, RefreshTokenMdKey)
+		ResponseTokenInjector(ctx, accessToken, refreshToken)
+	}
 	return
 }
 func (s *StatelessAuthenticator) UserGetAccessToken(authType string, login string, pass string) (accessToken, refreshToken string, err error) {
