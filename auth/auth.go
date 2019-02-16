@@ -81,7 +81,7 @@ func (s *StatelessAuthenticator) RefreshTokenIfNeeded(accessToken string, refres
 	// need refresh
 	refreshTI, err := s.GetTokenInfo(refreshToken)
 	if err == nil && time.Now().Before(refreshTI.GetExpiresAt()) {
-		newAccessToken, newRefreshToken, err := s.UserRefreshToken(refreshTI.GetRefresh())
+		newAccessToken, newRefreshToken, err := s.UserRefreshToken(refreshToken)
 		if err == nil {
 			return newAccessToken, newRefreshToken
 		}
@@ -152,7 +152,7 @@ func (s *StatelessAuthenticator) UserRefreshToken(refreshToken string) (newAcces
 		SetHeader("Content-Type", "application/json").
 		SetQueryParams(map[string]string{"grant_type":"refresh_token","client_id":s.clientId,
 			"scope":"user_rw","client_secret":s.clientSecret}).
-		SetBody(`{"refresh_token":`+refreshToken+`}`).
+		SetBody(`{"refresh_token":"`+refreshToken+`"}`).
 		SetResult(&TokenResult{}).
 		Post(s.oauthEndpoint+"/token")
 	if err != nil {
