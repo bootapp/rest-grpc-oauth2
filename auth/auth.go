@@ -3,11 +3,12 @@ package auth
 import (
 	"context"
 	"github.com/bootapp/oauth2"
-	"github.com/bootapp/oauth2/errors"
 	"github.com/bootapp/oauth2/generates"
 	"github.com/dgrijalva/jwt-go"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
+	"google.golang.org/grpc/status"
 	"gopkg.in/resty.v1"
 	"log"
 	"strconv"
@@ -61,11 +62,11 @@ func (a *StatelessAuthenticator) UpdateKey(keyPem []byte, method jwt.SigningMeth
 func (s *StatelessAuthenticator) GetTokenInfo(token string) (oauth2.TokenInfo, error) {
 	if s.decoder == nil {
 		log.Fatalf("authenticator error, no decoder registered!")
-		return nil, errors.ErrServerError
+		return nil, status.Error(codes.Internal, "no decoder registered")
 	}
 	ti, err := s.decoder.ExtractInfo(token)
 	if err != nil {
-		return nil, errors.ErrInvalidAccessToken
+		return nil, status.Error(codes.Unauthenticated, "invalid access token")
 	}
 	return ti, nil
 }
@@ -90,11 +91,11 @@ func (s *StatelessAuthenticator) RefreshTokenIfNeeded(accessToken string, refres
 
 }
 func (s *StatelessAuthenticator) HasRole(ctx context.Context, role string) (userId int64, orgId int64, hasRole bool)  {
+	userId, orgId, hasRole = 0, 0, false
 	accessToken, isAuth := s.IsAuthenticated(ctx)
 	if !isAuth {
 		return
 	}
-	userId, orgId, hasRole = 0, 0, false
 	ti, err := s.GetTokenInfo(accessToken)
 	if err != nil {
 		return
@@ -119,14 +120,14 @@ func (s *StatelessAuthenticator) HasRole(ctx context.Context, role string) (user
 	}
 	return
 }
-func (a *StatelessAuthenticator) IsAuthenticated(ctx context.Context) (accessToken string, isAuth bool) {
+func (s *StatelessAuthenticator) IsAuthenticated(ctx context.Context) (accessToken string, isAuth bool) {
 	accessToken, isAuth = "", false
 	md, ok := metadata.FromIncomingContext(ctx)
 	if !ok {
 		return
 	}
 	accessToken = FirstIncomingHeaderMdWithName(md, AccessTokenMdKey)
-	ti, err := a.GetTokenInfo(accessToken)
+	ti, err := s.GetTokenInfo(accessToken)
 	if err != nil {
 		return
 	}
@@ -140,6 +141,41 @@ func (a *StatelessAuthenticator) IsAuthenticated(ctx context.Context) (accessTok
 		ResponseTokenInjector(ctx, accessToken, refreshToken)
 	}
 	return
+}
+func (s *StatelessAuthenticator) CheckRole(ctx context.Context, role string) (int64, int64, error) {
+	accessToken, isAuth := s.IsAuthenticated(ctx)
+	if !isAuth {
+		return 0, 0, status.Error(codes.Unauthenticated, "invalid access token")
+	}
+	ti, err := s.GetTokenInfo(accessToken)
+	if err != nil {
+		return 0, 0, status.Error(codes.Unauthenticated, "invalid access token")
+	}
+	if ti.GetExpiresAt().Before(time.Now()) {
+		return 0, 0, status.Error(codes.Unauthenticated, "invalid access token")
+	}
+	authorities := ti.GetAuthorities()
+	userId, err := strconv.ParseInt(ti.GetUserID(), 10, 64)
+	if err != nil {
+		return 0, 0, status.Error(codes.Unauthenticated, "invalid access token")
+	}
+	orgId, err := strconv.ParseInt(ti.GetOrgID(), 10, 64)
+	if err != nil {
+		return userId, 0, status.Error(codes.Unauthenticated, "invalid access token")
+	}
+	for idx := range authorities {
+		if role == authorities[idx] {
+			return userId, orgId, nil
+		}
+	}
+	return 0, 0, status.Error(codes.PermissionDenied, "user not authorized")
+}
+func (s *StatelessAuthenticator) CheckAuthentication(ctx context.Context) error {
+	_, isAuth := s.IsAuthenticated(ctx)
+	if !isAuth {
+		return status.Error(codes.Unauthenticated, "invalid access token")
+	}
+	return nil
 }
 func (s *StatelessAuthenticator) UserGetAccessToken(authType string, login string, pass string) (accessToken, refreshToken string, err error) {
 	res, err := resty.R().
