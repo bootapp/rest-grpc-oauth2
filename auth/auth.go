@@ -11,7 +11,6 @@ import (
 	"google.golang.org/grpc/status"
 	"gopkg.in/resty.v1"
 	"log"
-	"strconv"
 	"time"
 )
 type TokenResult struct {
@@ -19,6 +18,20 @@ type TokenResult struct {
 	ExpiresIn int64	`json:"expires_in"`
 	RefreshToken string `json:"refresh_token"`
 	TokenType string `json:"token_type"`
+}
+func AuthorityEncode(orgRoles []string, userRoles []string) (orgUserKey map[uint64]uint64) {
+	var orgKey uint64 = 0
+	for _, orgRole := range orgRoles {
+		orgKey |= uint64(strToOrgAuthority[orgRole])
+	}
+	orgUserKey= make(map[uint64]uint64)
+	for _, userRole := range userRoles {
+		orgUser := strToOrgUserAuthority[userRole]
+		if orgUser[0] & orgKey != 0 {
+			orgUserKey[orgUser[0]] |= orgUser[1]
+		}
+	}
+	return orgUserKey
 }
 
 func ResponseTokenInjector(ctx context.Context, accessToken string, refreshToken string) {
@@ -104,19 +117,14 @@ func (s *StatelessAuthenticator) HasRole(ctx context.Context, role string) (user
 		return
 	}
 	authorities := ti.GetAuthorities()
-	userId, err = strconv.ParseInt(ti.GetUserID(), 10, 64)
+	userId = ti.GetUserID()
+	orgId = ti.GetOrgID()
 	if err != nil {
 		return
 	}
-	orgId, err = strconv.ParseInt(ti.GetOrgID(), 10, 64)
-	if err != nil {
-		return
-	}
-	for idx := range authorities {
-		if role == authorities[idx] {
-			hasRole = true
-			break
-		}
+	targetRole := strToOrgUserAuthority[role]
+	if authorities[targetRole[0]] & targetRole[1] != 0 {
+		hasRole = true
 	}
 	return
 }
@@ -155,18 +163,12 @@ func (s *StatelessAuthenticator) CheckRole(ctx context.Context, role string) (in
 		return 0, 0, status.Error(codes.Unauthenticated, "invalid access token")
 	}
 	authorities := ti.GetAuthorities()
-	userId, err := strconv.ParseInt(ti.GetUserID(), 10, 64)
-	if err != nil {
-		return 0, 0, status.Error(codes.Unauthenticated, "invalid access token")
-	}
-	orgId, err := strconv.ParseInt(ti.GetOrgID(), 10, 64)
-	if err != nil {
-		return userId, 0, status.Error(codes.Unauthenticated, "invalid access token")
-	}
-	for idx := range authorities {
-		if role == authorities[idx] {
-			return userId, orgId, nil
-		}
+	userId := ti.GetUserID()
+	orgId:= ti.GetOrgID()
+	targetRole := strToOrgUserAuthority[role]
+
+	if authorities[targetRole[0]] & targetRole[1] != 0 {
+		return userId, orgId, nil
 	}
 	return 0, 0, status.Error(codes.PermissionDenied, "user not authorized")
 }
