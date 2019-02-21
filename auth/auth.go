@@ -68,6 +68,15 @@ func (a *StatelessAuthenticator) SetOauthClient(endpoint, clientId, clientSecret
 	a.clientId = clientId
 	a.clientSecret = clientSecret
 }
+func (a *StatelessAuthenticator) SetOauthClientId(clientId string) {
+	a.clientId = clientId
+}
+func (a *StatelessAuthenticator) SetOauthClientSecret(clientSecret string) {
+	a.clientSecret = clientSecret
+}
+func (a *StatelessAuthenticator) SetOauthEndpoint(endpoint string) {
+	a.oauthEndpoint = endpoint
+}
 func (a *StatelessAuthenticator) SetAuthorityEndpoint(endpoint string) {
 	a.authorityEndpoint = endpoint
 }

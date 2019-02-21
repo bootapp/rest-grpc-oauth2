@@ -1,7 +1,4 @@
 package auth
-//type OrgAuthority uint64
-//type UserAuthority uint64
-//type OrgUserAuthority [2]uint64
 
 type OrgAuthority struct {
 	value int64
