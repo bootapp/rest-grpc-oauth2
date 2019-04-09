@@ -24,13 +24,13 @@ type TokenResult struct {
 func AuthorityEncode(orgAuthorityKeys []string, userAuthorityKeys []string) (authorities map[int64]int64) {
 	var orgValue int64 = 0
 	for _, orgKey := range orgAuthorityKeys {
-		orgValue |= strToOrgAuthority[orgKey].value
+		orgValue |= strToOrgAuthority[orgKey].orgAuthValue
 	}
 	authorities = make(map[int64]int64)
 	for _, userKey := range userAuthorityKeys {
 		userAuthority := strToUserAuthority[userKey]
-		if userAuthority.orgAuthorityValue & orgValue != 0 {
-			authorities[userAuthority.orgAuthorityValue] |= userAuthority.value
+		if userAuthority.orgAuthValue & orgValue != 0 {
+			authorities[userAuthority.orgAuthValue] |= userAuthority.userAuthValue
 		}
 	}
 	return authorities
@@ -63,29 +63,29 @@ var instance = &StatelessAuthenticator{}
 func GetInstance() *StatelessAuthenticator {
 	return instance
 }
-func (a *StatelessAuthenticator) SetOauthClient(endpoint, clientId, clientSecret string) {
-	a.oauthEndpoint = endpoint
-	a.clientId = clientId
-	a.clientSecret = clientSecret
+func (s *StatelessAuthenticator) SetOauthClient(endpoint, clientId, clientSecret string) {
+	s.oauthEndpoint = endpoint
+	s.clientId = clientId
+	s.clientSecret = clientSecret
 }
-func (a *StatelessAuthenticator) SetOauthClientId(clientId string) {
-	a.clientId = clientId
+func (s *StatelessAuthenticator) SetOauthClientId(clientId string) {
+	s.clientId = clientId
 }
-func (a *StatelessAuthenticator) SetOauthClientSecret(clientSecret string) {
-	a.clientSecret = clientSecret
+func (s *StatelessAuthenticator) SetOauthClientSecret(clientSecret string) {
+	s.clientSecret = clientSecret
 }
-func (a *StatelessAuthenticator) SetOauthEndpoint(endpoint string) {
-	a.oauthEndpoint = endpoint
+func (s *StatelessAuthenticator) SetOauthEndpoint(endpoint string) {
+	s.oauthEndpoint = endpoint
 }
-func (a *StatelessAuthenticator) SetAuthorityEndpoint(endpoint string) {
-	a.authorityEndpoint = endpoint
+func (s *StatelessAuthenticator) SetAuthorityEndpoint(endpoint string) {
+	s.authorityEndpoint = endpoint
 }
-func (a *StatelessAuthenticator) ScheduledFetchAuthorities(ctx context.Context) error {
-	conn, err := grpc.Dial(a.authorityEndpoint, grpc.WithInsecure())
+func (s *StatelessAuthenticator) ScheduledFetchAuthorities(ctx context.Context) error {
+	conn, err := grpc.Dial(s.authorityEndpoint, grpc.WithInsecure())
 	if err != nil {
 		return err
 	}
-	client := dal_core_user.NewDalCoreAuthorityServiceClient(conn)
+	client := dal_core.NewDalCoreAuthServiceClient(conn)
 	go func() {
 		scheduled := time.NewTimer(time.Second)
 		for range scheduled.C {
@@ -95,13 +95,13 @@ func (a *StatelessAuthenticator) ScheduledFetchAuthorities(ctx context.Context) 
 				log.Fatal(err)
 			} else {
 				for _, authority:= range authorities.OrgAuthorities {
-					strToOrgAuthority[authority.IndexKey] = OrgAuthority{indexKey:authority.IndexKey,
-						value:authority.Value, name: authority.Name}
+					strToOrgAuthority[authority.OrgAuthKey] = OrgAuthority{orgAuthKey:authority.OrgAuthKey,
+						orgAuthValue:authority.OrgAuthValue, name: authority.Name}
 				}
 				for _, authority := range authorities.UserAuthorities {
-					strToUserAuthority[authority.IndexKey] = UserAuthority{indexKey:authority.IndexKey,
-						orgAuthorityKey:authority.OrgAuthorityKey, value: authority.Value,
-						orgAuthorityValue:strToOrgAuthority[authority.OrgAuthorityKey].value, name:authority.Name}
+					strToUserAuthority[authority.UserAuthKey] = UserAuthority{userAuthKey:authority.UserAuthKey,
+						orgAuthKey:authority.OrgAuthKey, userAuthValue: authority.UserAuthValue,
+						orgAuthValue:strToOrgAuthority[authority.OrgAuthKey].orgAuthValue, name:authority.Name}
 				}
 			}
 			scheduled.Reset(time.Minute * 5)
@@ -110,11 +110,11 @@ func (a *StatelessAuthenticator) ScheduledFetchAuthorities(ctx context.Context) 
 	}()
 	return nil
 }
-func (a *StatelessAuthenticator) UpdateKey(keyPem []byte, method jwt.SigningMethod) {
-	if a.decoder == nil {
-		a.decoder = generates.NewJWTAccessDecoder(keyPem, method)
+func (s *StatelessAuthenticator) UpdateKey(keyPem []byte, method jwt.SigningMethod) {
+	if s.decoder == nil {
+		s.decoder = generates.NewJWTAccessDecoder(keyPem, method)
 	} else {
-		_= a.decoder.UpdatePublicKey(keyPem, method)
+		_= s.decoder.UpdatePublicKey(keyPem, method)
 	}
 }
 func (s *StatelessAuthenticator) GetTokenInfo(token string) (oauth2.TokenInfo, error) {
@@ -168,7 +168,7 @@ func (s *StatelessAuthenticator) HasAuthority(ctx context.Context, authority str
 		return
 	}
 	target := strToUserAuthority[authority]
-	if authorities[target.orgAuthorityValue] & target.value != 0 {
+	if authorities[target.orgAuthValue] & target.userAuthValue != 0 {
 		hasAuthority = true
 	}
 	return
@@ -211,7 +211,7 @@ func (s *StatelessAuthenticator) CheckAuthority(ctx context.Context, authority s
 	userId := ti.GetUserID()
 	orgId:= ti.GetOrgID()
 	target := strToUserAuthority[authority]
-	if authorities[target.orgAuthorityValue] & target.value != 0 {
+	if authorities[target.orgAuthValue] & target.userAuthValue != 0 {
 		return userId, orgId, nil
 	}
 	return 0, 0, status.Error(codes.PermissionDenied, "user not authorized")
@@ -226,8 +226,8 @@ func (s *StatelessAuthenticator) CheckAuthentication(ctx context.Context) error 
 func (s *StatelessAuthenticator) UserGetAccessToken(authType string, login string, pass string) (accessToken, refreshToken string, err error) {
 	res, err := resty.R().
 		SetHeader("Content-Type", "application/json").
-		SetQueryParams(map[string]string{"grant_type":"password","client_id":s.clientId,
-			"scope":"user_rw","client_secret":s.clientSecret}).
+		SetQueryParams(map[string]string{"grant_type":"password","client_id": s.clientId,
+			"scope":"user_rw","client_secret": s.clientSecret}).
 		SetBody(`{"username":"`+login+`","password":"`+pass+`","authType":"`+authType+`"}`).
 		SetResult(&TokenResult{}).
 		Post(s.oauthEndpoint+"/token")
@@ -243,8 +243,8 @@ func (s *StatelessAuthenticator) UserGetAccessToken(authType string, login strin
 func (s *StatelessAuthenticator) UserRefreshToken(refreshToken string) (newAccessToken, newRefreshToken string, err error) {
 	res, err := resty.R().
 		SetHeader("Content-Type", "application/json").
-		SetQueryParams(map[string]string{"grant_type":"refresh_token","client_id":s.clientId,
-			"scope":"user_rw","client_secret":s.clientSecret}).
+		SetQueryParams(map[string]string{"grant_type":"refresh_token","client_id": s.clientId,
+			"scope":"user_rw","client_secret": s.clientSecret}).
 		SetBody(`{"refresh_token":"`+refreshToken+`"}`).
 		SetResult(&TokenResult{}).
 		Post(s.oauthEndpoint+"/token")
