@@ -2,6 +2,7 @@ package auth
 
 import (
 	"context"
+	"errors"
 	"github.com/bootapp/oauth2"
 	"github.com/bootapp/oauth2/generates"
 	"github.com/bootapp/rest-grpc-oauth2/auth/pb"
@@ -13,6 +14,7 @@ import (
 	"google.golang.org/grpc/status"
 	"gopkg.in/resty.v1"
 	"log"
+	"net/http"
 	"time"
 )
 type TokenResult struct {
@@ -223,15 +225,24 @@ func (s *StatelessAuthenticator) CheckAuthentication(ctx context.Context) error 
 	}
 	return nil
 }
-func (s *StatelessAuthenticator) UserGetAccessToken(authType string, login string, pass string) (accessToken, refreshToken string, err error) {
+func (s *StatelessAuthenticator) UserGetAccessToken(authType, login, pass, code, orgId string) (accessToken, refreshToken string, err error) {
 	res, err := resty.R().
 		SetHeader("Content-Type", "application/json").
 		SetQueryParams(map[string]string{"grant_type":"password","client_id": s.clientId,
 			"scope":"user_rw","client_secret": s.clientSecret}).
-		SetBody(`{"username":"`+login+`","password":"`+pass+`","authType":"`+authType+`"}`).
+		SetBody(`{"username":"`+login+
+			`","password":"`+pass+
+			`","authType":"`+authType+
+			`","orgId":"`+orgId+
+			`","code":"`+code+
+			`"}`).
 		SetResult(&TokenResult{}).
 		Post(s.oauthEndpoint+"/token")
 	if err != nil {
+		return
+	}
+	if res.StatusCode() == http.StatusBadRequest {
+		err = errors.New(res.String())
 		return
 	}
 	accessRes := res.Result().(*TokenResult)
