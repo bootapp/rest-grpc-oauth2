@@ -2,12 +2,10 @@ package auth
 
 import (
 	"context"
-	"errors"
 	"github.com/bootapp/oauth2"
 	"github.com/bootapp/oauth2/generates"
 	"github.com/bootapp/rest-grpc-oauth2/auth/pb"
 	"github.com/dgrijalva/jwt-go"
-	"github.com/golang/protobuf/ptypes/empty"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
@@ -23,16 +21,16 @@ type TokenResult struct {
 	RefreshToken string `json:"refresh_token"`
 	TokenType string `json:"token_type"`
 }
-func AuthorityEncode(orgAuthorityKeys []string, userAuthorityKeys []string) (authorities map[int64]int64) {
-	var orgValue int64 = 0
-	for _, orgKey := range orgAuthorityKeys {
-		orgValue |= strToOrgAuthority[orgKey].orgAuthValue
+func AuthorityEncode(groupAuthorityKeys []string, authorityKeys []string) (authorities map[int64]int64) {
+	var groupValue int64 = 0
+	for _, groupKey := range groupAuthorityKeys {
+		groupValue |= strToAuthorityGroup[groupKey].groupAuthValue
 	}
 	authorities = make(map[int64]int64)
-	for _, userKey := range userAuthorityKeys {
-		userAuthority := strToUserAuthority[userKey]
-		if userAuthority.orgAuthValue & orgValue != 0 {
-			authorities[userAuthority.orgAuthValue] |= userAuthority.userAuthValue
+	for _, authKey := range authorityKeys {
+		authority := strToAuthority[authKey]
+		if authority.groupAuthValue & groupValue != 0 {
+			authorities[authority.groupAuthValue] |= authority.authValue
 		}
 	}
 	return authorities
@@ -87,27 +85,27 @@ func (s *StatelessAuthenticator) ScheduledFetchAuthorities(ctx context.Context) 
 	if err != nil {
 		return err
 	}
-	client := dal_core.NewDalCoreAuthServiceClient(conn)
+	client := core.NewDalAuthServiceClient(conn)
 	go func() {
 		scheduled := time.NewTimer(time.Second)
 		for range scheduled.C {
 			log.Println("refreshing authorities...")
-			authorities, err := client.GetAuthorities(ctx, &empty.Empty{})
+			authorities, err := client.ReadAuthorities(ctx, &core.AuthEmpty{})
 			if err != nil {
-				log.Fatal(err)
+				log.Println(err)
 			} else {
-				for _, authority:= range authorities.OrgAuthorities {
-					strToOrgAuthority[authority.OrgAuthKey] = OrgAuthority{orgAuthKey:authority.OrgAuthKey,
-						orgAuthValue:authority.OrgAuthValue, name: authority.Name}
+				for _, authority:= range authorities.AuthorityGroups {
+					strToAuthorityGroup[authority.GroupAuthKey] = AuthorityGroup{groupAuthKey:authority.GroupAuthKey,
+						groupAuthValue:authority.GroupAuthValue, name: authority.Name}
 				}
-				for _, authority := range authorities.UserAuthorities {
-					strToUserAuthority[authority.UserAuthKey] = UserAuthority{userAuthKey:authority.UserAuthKey,
-						orgAuthKey:authority.OrgAuthKey, userAuthValue: authority.UserAuthValue,
-						orgAuthValue:strToOrgAuthority[authority.OrgAuthKey].orgAuthValue, name:authority.Name}
+				for _, authority := range authorities.Authorities {
+					strToAuthority[authority.AuthKey] = Authority{authKey:authority.AuthKey,
+						groupAuthKey:authority.GroupAuthKey, authValue: authority.AuthValue,
+						groupAuthValue:strToAuthorityGroup[authority.GroupAuthKey].groupAuthValue, name:authority.Name}
 				}
+				log.Println("refreshing authorities...done")
 			}
 			scheduled.Reset(time.Minute * 5)
-			log.Println("refreshing authorities...done")
 		}
 	}()
 	return nil
@@ -169,8 +167,8 @@ func (s *StatelessAuthenticator) HasAuthority(ctx context.Context, authority str
 	if err != nil {
 		return
 	}
-	target := strToUserAuthority[authority]
-	if authorities[target.orgAuthValue] & target.userAuthValue != 0 {
+	target := strToAuthority[authority]
+	if authorities[target.groupAuthValue] & target.authValue != 0 {
 		hasAuthority = true
 	}
 	return
@@ -212,8 +210,8 @@ func (s *StatelessAuthenticator) CheckAuthority(ctx context.Context, authority s
 	authorities := ti.GetAuthorities()
 	userId := ti.GetUserID()
 	orgId:= ti.GetOrgID()
-	target := strToUserAuthority[authority]
-	if authorities[target.orgAuthValue] & target.userAuthValue != 0 {
+	target := strToAuthority[authority]
+	if authorities[target.groupAuthValue] & target.authValue != 0 {
 		return userId, orgId, nil
 	}
 	return 0, 0, status.Error(codes.PermissionDenied, "user not authorized")
@@ -242,8 +240,10 @@ func (s *StatelessAuthenticator) UserGetAccessToken(authType, login, pass, code,
 		return
 	}
 	if res.StatusCode() == http.StatusBadRequest {
-		err = errors.New(res.String())
+		err = status.Error(codes.InvalidArgument, res.String())
 		return
+	} else if res.StatusCode() == http.StatusMultipleChoices {
+		err = status.Error(codes.FailedPrecondition, res.String())
 	}
 	accessRes := res.Result().(*TokenResult)
 	accessToken = accessRes.AccessToken

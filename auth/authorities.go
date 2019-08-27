@@ -1,16 +1,16 @@
 package auth
 
-type OrgAuthority struct {
+type AuthorityGroup struct {
 	name string
-	orgAuthKey string
-	orgAuthValue int64
+	groupAuthKey string
+	groupAuthValue int64
 }
-type UserAuthority struct {
+type Authority struct {
 	name string
-	orgAuthKey string
-	orgAuthValue int64
-	userAuthKey string
-	userAuthValue int64
+	groupAuthKey string
+	groupAuthValue int64
+	authKey string
+	authValue int64
 }
-var strToOrgAuthority = map[string] OrgAuthority{}
-var strToUserAuthority = map[string] UserAuthority{}
+var strToAuthorityGroup = map[string] AuthorityGroup{}
+var strToAuthority = map[string] Authority{}
