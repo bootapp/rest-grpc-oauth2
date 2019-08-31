@@ -88,8 +88,7 @@ func TokenPassingInterceptor(ctx context.Context, req interface{}, info *grpc.Un
 	if md, ok := metadata.FromIncomingContext(ctx); ok {
 		keys := md.Get(AccessTokenMdKey)
 		if len(keys) > 0 {
-			metadata.Pairs(AccessTokenMdKey, keys[0])
-			ctx = metadata.NewOutgoingContext(ctx, md)
+			ctx = metadata.NewOutgoingContext(ctx, metadata.Pairs(AccessTokenMdKey, keys[0]))
 		}
 	}
 	return handler(ctx, req)
