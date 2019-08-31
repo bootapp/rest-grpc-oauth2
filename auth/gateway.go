@@ -4,6 +4,7 @@ import (
 	"context"
 	"github.com/golang/protobuf/proto"
 	"github.com/grpc-ecosystem/grpc-gateway/runtime"
+	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
 	"log"
 	"net/http"
@@ -81,4 +82,15 @@ func GatewayRequestCookieParser(_ context.Context, req *http.Request) (resMD met
 		}
 	}
 	return resMD
+}
+
+func TokenPassingInterceptor(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
+	if md, ok := metadata.FromIncomingContext(ctx); ok {
+		keys := md.Get(AccessTokenMdKey)
+		if len(keys) > 0 {
+			metadata.Pairs(AccessTokenMdKey, keys[0])
+			ctx = metadata.NewOutgoingContext(ctx, md)
+		}
+	}
+	return handler(ctx, req)
 }
