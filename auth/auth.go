@@ -173,7 +173,7 @@ func (s *StatelessAuthenticator) HasAuthority(ctx context.Context, authority str
 	}
 	return
 }
-func (s *StatelessAuthenticator) GetAuthInfo(ctx context.Context, authority string) (userId int64, orgId int64) {
+func (s *StatelessAuthenticator) GetAuthInfo(ctx context.Context) (userId int64, orgId int64) {
 	userId, orgId = 0, 0
 	accessToken, isAuth := s.IsAuthenticated(ctx)
 	if !isAuth {
