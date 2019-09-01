@@ -235,7 +235,7 @@ func (s *StatelessAuthenticator) UserGetAccessToken(authType, login, pass, code,
 			`","code":"`+code+
 			`"}`).
 		SetResult(&TokenResult{}).
-		Post(s.oauthEndpoint+"/token")
+		Post(s.oauthEndpoint+"/api/oauth/token")
 	if err != nil {
 		return
 	}
@@ -258,7 +258,7 @@ func (s *StatelessAuthenticator) UserRefreshToken(refreshToken string) (newAcces
 			"scope":"user_rw","client_secret": s.clientSecret}).
 		SetBody(`{"refresh_token":"`+refreshToken+`"}`).
 		SetResult(&TokenResult{}).
-		Post(s.oauthEndpoint+"/token")
+		Post(s.oauthEndpoint+"/api/oauth/token")
 	if err != nil {
 		return
 	}
