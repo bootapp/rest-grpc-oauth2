@@ -173,6 +173,23 @@ func (s *StatelessAuthenticator) HasAuthority(ctx context.Context, authority str
 	}
 	return
 }
+func (s *StatelessAuthenticator) GetAuthInfo(ctx context.Context, authority string) (userId int64, orgId int64) {
+	userId, orgId = 0, 0
+	accessToken, isAuth := s.IsAuthenticated(ctx)
+	if !isAuth {
+		return
+	}
+	ti, err := s.GetTokenInfo(accessToken)
+	if err != nil {
+		return
+	}
+	if ti.GetExpiresAt().Before(time.Now()) {
+		return
+	}
+	userId = ti.GetUserID()
+	orgId = ti.GetOrgID()
+	return
+}
 func (s *StatelessAuthenticator) IsAuthenticated(ctx context.Context) (accessToken string, isAuth bool) {
 	accessToken, isAuth = "", false
 	md, ok := metadata.FromIncomingContext(ctx)
