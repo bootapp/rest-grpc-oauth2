@@ -196,7 +196,7 @@ func (s *StatelessAuthenticator) GetAuthInfo(ctx context.Context) (userId int64,
 	return
 }
 
-func (s *StatelessAuthenticator) GetAuthInfoFromHttp(req http.Request) (userId int64, orgId int64) {
+func (s *StatelessAuthenticator) GetAuthInfoFromHttp(req *http.Request) (userId int64, orgId int64) {
 	userId, orgId = 0, 0
 	accessToken, err := req.Cookie(AccessTokenCookieKey)
 	if err != nil {
