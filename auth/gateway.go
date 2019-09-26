@@ -28,19 +28,31 @@ func FirstIncomingHeaderMdWithName(md metadata.MD, name string) string {
 func GatewayResponseCookieAnnotator(ctx context.Context, response http.ResponseWriter, _ proto.Message) error {
 	md, ok := runtime.ServerMetadataFromContext(ctx)
 	if ok {
-		accessToken, refreshToken := FirstTrailerMdWithName(md, AccessTokenMdKey), FirstTrailerMdWithName(md, RefreshTokenMdKey)
-		var cookie http.Cookie
-		if accessToken != "" {
-			cookie = http.Cookie{
-				Name: AccessTokenCookieKey, Value:accessToken, HttpOnly: true, Path: "/", MaxAge: 86400, Expires: time.Now().Add(24 * time.Hour),
+		clearToken := FirstTrailerMdWithName(md, ClearTokenMdKey)
+		if clearToken != "" {
+			cookie := http.Cookie{
+				Name: AccessTokenCookieKey, Value: "", HttpOnly: true, Path: "/", MaxAge: 0, Expires: time.Now(),
 			}
 			http.SetCookie(response, &cookie)
-		}
-		if refreshToken != "" {
 			cookie = http.Cookie{
-				Name: RefreshTokenCookieKey, Value:refreshToken, HttpOnly: true, Path: "/", MaxAge: 7 * 86400, Expires: time.Now().Add(7 * 24 * time.Hour),
+				Name: RefreshTokenCookieKey, Value: "", HttpOnly: true, Path: "/", MaxAge: 0, Expires: time.Now(),
 			}
 			http.SetCookie(response, &cookie)
+		} else {
+			accessToken, refreshToken := FirstTrailerMdWithName(md, AccessTokenMdKey), FirstTrailerMdWithName(md, RefreshTokenMdKey)
+			var cookie http.Cookie
+			if accessToken != "" {
+				cookie = http.Cookie{
+					Name: AccessTokenCookieKey, Value: accessToken, HttpOnly: true, Path: "/", MaxAge: 86400, Expires: time.Now().Add(24 * time.Hour),
+				}
+				http.SetCookie(response, &cookie)
+			}
+			if refreshToken != "" {
+				cookie = http.Cookie{
+					Name: RefreshTokenCookieKey, Value: refreshToken, HttpOnly: true, Path: "/", MaxAge: 7 * 86400, Expires: time.Now().Add(7 * 24 * time.Hour),
+				}
+				http.SetCookie(response, &cookie)
+			}
 		}
 	}
 	return nil

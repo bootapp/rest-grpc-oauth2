@@ -5,6 +5,7 @@ import "time"
 const (
 	AccessTokenMdKey = "x-cookie-access"
 	RefreshTokenMdKey = "x-cookie-refresh"
+	ClearTokenMdKey = "clear-token"
 	AccessTokenCookieKey = "access_token"
 	RefreshTokenCookieKey = "refresh_token"
 	TokenRefreshed = "token-refreshed"

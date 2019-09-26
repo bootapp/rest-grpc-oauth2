@@ -51,6 +51,11 @@ func ResponseTokenInjector(ctx context.Context, accessToken string, refreshToken
 	_ = grpc.SetTrailer(ctx, trailer)
 }
 
+func ClearToken(ctx context.Context) {
+	trailer := metadata.Pairs(ClearTokenMdKey, "true")
+	_ = grpc.SetTrailer(ctx, trailer)
+}
+
 type StatelessAuthenticator struct {
 	decoder *generates.JWTAccessGenerate
 	oauthEndpoint string
