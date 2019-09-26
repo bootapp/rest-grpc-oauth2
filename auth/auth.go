@@ -195,6 +195,25 @@ func (s *StatelessAuthenticator) GetAuthInfo(ctx context.Context) (userId int64,
 	orgId = ti.GetOrgID()
 	return
 }
+
+func (s *StatelessAuthenticator) GetAuthInfoFromHttp(req http.Request) (userId int64, orgId int64) {
+	userId, orgId = 0, 0
+	accessToken, err := req.Cookie(AccessTokenCookieKey)
+	if err != nil {
+		return
+	}
+	ti, err := s.GetTokenInfo(accessToken.Value)
+	if err != nil {
+		return
+	}
+	if ti.GetExpiresAt().Before(time.Now()) {
+		return
+	}
+	userId = ti.GetUserID()
+	orgId = ti.GetOrgID()
+	return
+}
+
 func (s *StatelessAuthenticator) IsAuthenticated(ctx context.Context) (accessToken string, isAuth bool) {
 	accessToken, isAuth = "", false
 	md, ok := metadata.FromIncomingContext(ctx)
