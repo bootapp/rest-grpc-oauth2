@@ -21,19 +21,27 @@ type TokenResult struct {
 	RefreshToken string `json:"refresh_token"`
 	TokenType string `json:"token_type"`
 }
-func AuthorityEncode(groupAuthorityKeys []string, authorityKeys []string) (authorities map[int64]int64) {
+func AuthorityEncode(groupAuthorityKeys []string, authorityKeys []string) (authorities map[int64][]int64, err error) {
 	var groupValue int64 = 0
 	for _, groupKey := range groupAuthorityKeys {
 		groupValue |= strToAuthorityGroup[groupKey].groupAuthValue
 	}
-	authorities = make(map[int64]int64)
+	authorities = make(map[int64][]int64)
 	for _, authKey := range authorityKeys {
 		authority := strToAuthority[authKey]
 		if authority.groupAuthValue & groupValue != 0 {
-			authorities[authority.groupAuthValue] |= authority.authValue
+			if len(authority.authValue) != len(authorities[authority.groupAuthValue]) {
+				err = status.Error(codes.Unauthenticated, "UNAUTHENTICATED:authentication expired.")
+				return
+			}
+			authorities[authority.groupAuthValue] = make([]int64, len(authority.authValue))
+			for i := 0; i < len(authority.authValue);i++ {
+				authorities[authority.groupAuthValue][i] |= authority.authValue[i]
+			}
+
 		}
 	}
-	return authorities
+	return
 }
 
 func ResponseTokenInjector(ctx context.Context, accessToken string, refreshToken string) {
@@ -95,7 +103,7 @@ func (s *StatelessAuthenticator) ScheduledFetchAuthorities(ctx context.Context) 
 		scheduled := time.NewTimer(time.Second)
 		for range scheduled.C {
 			log.Println("refreshing authorities...")
-			authorities, err := client.ReadAuthorities(ctx, &core.AuthEmpty{})
+			authorities, err := client.ReadAuthorities(ctx, &core.ReadAuthoritiesReq{})
 			if err != nil {
 				log.Println(err)
 			} else {
@@ -173,8 +181,15 @@ func (s *StatelessAuthenticator) HasAuthority(ctx context.Context, authority str
 		return
 	}
 	target := strToAuthority[authority]
-	if authorities[target.groupAuthValue] & target.authValue != 0 {
-		hasAuthority = true
+	if len(authorities[target.groupAuthValue]) != len(target.authValue) {
+		hasAuthority = false
+		return
+	}
+	hasAuthority = true
+	for i, v := range authorities[target.groupAuthValue] {
+		if v & target.authValue[i] == 0 {
+			hasAuthority = false
+		}
 	}
 	return
 }
@@ -252,10 +267,15 @@ func (s *StatelessAuthenticator) CheckAuthority(ctx context.Context, authority s
 	userId := ti.GetUserID()
 	orgId:= ti.GetOrgID()
 	target := strToAuthority[authority]
-	if authorities[target.groupAuthValue] & target.authValue != 0 {
-		return userId, orgId, nil
+	if len(authorities[target.groupAuthValue]) != len(target.authValue) {
+		return 0, 0, status.Error(codes.Unauthenticated, "UNAUTHENTICATED")
 	}
-	return 0, 0, status.Error(codes.PermissionDenied, "user not authorized")
+	for i, v := range authorities[target.groupAuthValue] {
+		if v & target.authValue[i] == 0 {
+			return 0, 0, status.Error(codes.PermissionDenied, "user not authorized")
+		}
+	}
+	return userId, orgId, nil
 }
 func (s *StatelessAuthenticator) CheckAuthentication(ctx context.Context) error {
 	_, isAuth := s.IsAuthenticated(ctx)

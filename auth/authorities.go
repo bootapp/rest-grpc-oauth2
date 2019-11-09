@@ -10,7 +10,7 @@ type Authority struct {
 	groupAuthKey string
 	groupAuthValue int64
 	authKey string
-	authValue int64
+	authValue []int64
 }
 var strToAuthorityGroup = map[string] AuthorityGroup{}
 var strToAuthority = map[string] Authority{}
