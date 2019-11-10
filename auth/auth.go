@@ -41,7 +41,7 @@ func AuthorityEncode(authGroupIds []string, authorityKeys []string) (authorities
 		if _, ok := authorities[authGroup.Pid]; !ok {
 			authorities[authGroup.Pid] = make([]int64, 2)
 		}
-		authorities[groupId][0] |= authGroup.Value
+		authorities[authGroup.Pid][0] |= authGroup.Value
 	}
 	for _, authKey := range authorityKeys {
 		authority := strToAuthority[authKey]
