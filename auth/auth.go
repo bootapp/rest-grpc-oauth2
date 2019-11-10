@@ -25,14 +25,14 @@ type TokenResult struct {
 func AuthorityEncode(authGroupIds []string, authorityKeys []string) (authorities map[int64][]int64, err error) {
 	authorities = make(map[int64][]int64)
 	for _, groupIdStr := range authGroupIds {
-		groupId, err := strconv.ParseInt(groupIdStr, 10, 64)
-		if err != nil {
-			err = status.Error(codes.Unauthenticated, err.Error())
+		groupId, err1 := strconv.ParseInt(groupIdStr, 10, 64)
+		if err1 != nil {
+			err = status.Error(codes.Unauthenticated, err1.Error())
 			return
 		}
 		authGroup, ok := authGroupMap[groupId]
 		if !ok {
-			err = status.Error(codes.Unauthenticated, err.Error())
+			err = status.Error(codes.Unauthenticated, err1.Error())
 			return
 		}
 		if authGroup.Pid == 0 {
