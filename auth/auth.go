@@ -27,12 +27,12 @@ func AuthorityEncode(authGroupIds []string, authorityKeys []string) (authorities
 	for _, groupIdStr := range authGroupIds {
 		groupId, err := strconv.ParseInt(groupIdStr, 10, 64)
 		if err != nil {
-			err = status.Error(codes.Unauthenticated, "UNAUTHENTICATED")
+			err = status.Error(codes.Unauthenticated, err.Error())
 			return
 		}
 		authGroup, ok := authGroupMap[groupId]
 		if !ok {
-			err = status.Error(codes.Unauthenticated, "UNAUTHENTICATED")
+			err = status.Error(codes.Unauthenticated, err.Error())
 			return
 		}
 		if authGroup.Pid == 0 {
