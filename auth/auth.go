@@ -13,6 +13,7 @@ import (
 	"gopkg.in/resty.v1"
 	"log"
 	"net/http"
+	"strconv"
 	"time"
 )
 type TokenResult struct {
@@ -21,24 +22,35 @@ type TokenResult struct {
 	RefreshToken string `json:"refresh_token"`
 	TokenType string `json:"token_type"`
 }
-func AuthorityEncode(groupAuthorityKeys []string, authorityKeys []string) (authorities map[int64][]int64, err error) {
-	var groupValue int64 = 0
-	for _, groupKey := range groupAuthorityKeys {
-		groupValue |= strToAuthorityGroup[groupKey].groupAuthValue
-	}
+func AuthorityEncode(authGroupIds []string, authorityKeys []string) (authorities map[int64][]int64, err error) {
 	authorities = make(map[int64][]int64)
+	for _, groupIdStr := range authGroupIds {
+		groupId, err := strconv.ParseInt(groupIdStr, 10, 64)
+		if err != nil {
+			err = status.Error(codes.Unauthenticated, "UNAUTHENTICATED")
+			return
+		}
+		authGroup, ok := authGroupMap[groupId]
+		if !ok {
+			err = status.Error(codes.Unauthenticated, "UNAUTHENTICATED")
+			return
+		}
+		if authGroup.Pid == 0 {
+			continue
+		}
+		if _, ok := authorities[authGroup.Pid]; !ok {
+			authorities[authGroup.Pid] = make([]int64, 2)
+		}
+		authorities[groupId][0] |= authGroup.Value
+	}
 	for _, authKey := range authorityKeys {
 		authority := strToAuthority[authKey]
-		if authority.groupAuthValue & groupValue != 0 {
-			if len(authority.authValue) != len(authorities[authority.groupAuthValue]) {
-				err = status.Error(codes.Unauthenticated, "UNAUTHENTICATED:authentication expired.")
-				return
-			}
-			authorities[authority.groupAuthValue] = make([]int64, len(authority.authValue))
-			for i := 0; i < len(authority.authValue);i++ {
-				authorities[authority.groupAuthValue][i] |= authority.authValue[i]
-			}
-
+		authGroup := authGroupMap[authority.GroupId]
+		if _, ok := authorities[authGroup.Pid]; !ok {
+			continue
+		}
+		if authGroup.Value & authorities[authGroup.Pid][0] != 0 {
+			authorities[authGroup.Pid][1] |= authority.Value
 		}
 	}
 	return
@@ -107,14 +119,13 @@ func (s *StatelessAuthenticator) ScheduledFetchAuthorities(ctx context.Context) 
 			if err != nil {
 				log.Println(err)
 			} else {
-				for _, authority:= range authorities.AuthorityGroups {
-					strToAuthorityGroup[authority.GroupAuthKey] = AuthorityGroup{groupAuthKey:authority.GroupAuthKey,
-						groupAuthValue:authority.GroupAuthValue, name: authority.Name}
+				for _, authGroup:= range authorities.AuthorityGroups {
+					authGroupMap[authGroup.Id] = AuthorityGroup{ Id:authGroup.Id, Pid:authGroup.Pid,
+						Value:authGroup.Value, Name:authGroup.Name }
 				}
-				for _, authority := range authorities.Authorities {
-					strToAuthority[authority.AuthKey] = Authority{authKey:authority.AuthKey,
-						groupAuthKey:authority.GroupAuthKey, authValue: authority.AuthValue,
-						groupAuthValue:strToAuthorityGroup[authority.GroupAuthKey].groupAuthValue, name:authority.Name}
+				for _, auth := range authorities.Authorities {
+					strToAuthority[auth.Key] = Authority{Key:auth.Key, Value: auth.Value,
+						GroupId:auth.GroupId, Name:auth.Name}
 				}
 				log.Println("refreshing authorities...done")
 			}
@@ -161,37 +172,32 @@ func (s *StatelessAuthenticator) RefreshTokenIfNeeded(accessToken string, refres
 	return accessToken, refreshToken, false
 
 }
-func (s *StatelessAuthenticator) HasAuthority(ctx context.Context, authority string) (userId int64, orgId int64, hasAuthority bool)  {
-	userId, orgId, hasAuthority = 0, 0, false
+func (s *StatelessAuthenticator) CheckAuthority(ctx context.Context, authority string) (int64, int64, error) {
 	accessToken, isAuth := s.IsAuthenticated(ctx)
 	if !isAuth {
-		return
+		return 0, 0, status.Error(codes.Unauthenticated, "invalid access token")
 	}
 	ti, err := s.GetTokenInfo(accessToken)
 	if err != nil {
-		return
+		return 0, 0, status.Error(codes.Unauthenticated, "invalid access token")
 	}
 	if ti.GetExpiresAt().Before(time.Now()) {
-		return
+		return 0, 0, status.Error(codes.Unauthenticated, "invalid access token")
 	}
 	authorities := ti.GetAuthorities()
-	userId = ti.GetUserID()
-	orgId = ti.GetOrgID()
-	if err != nil {
-		return
+	targetAuth, ok := strToAuthority[authority]
+	if !ok {
+		return 0, 0, status.Error(codes.Unauthenticated, "invalid access token")
 	}
-	target := strToAuthority[authority]
-	if len(authorities[target.groupAuthValue]) != len(target.authValue) {
-		hasAuthority = false
-		return
+	targetAuthGroup, ok := authGroupMap[targetAuth.GroupId]
+	if !ok {
+		return 0, 0, status.Error(codes.Unauthenticated, "invalid access token")
 	}
-	hasAuthority = true
-	for i, v := range authorities[target.groupAuthValue] {
-		if v & target.authValue[i] == 0 {
-			hasAuthority = false
-		}
+	if targetAuthGroup.Value & authorities[targetAuthGroup.Pid][0] == targetAuthGroup.Value &&
+		targetAuth.Value & authorities[targetAuthGroup.Pid][1] == targetAuth.Value {
+		return ti.GetUserID(), ti.GetOrgID(), nil
 	}
-	return
+	return 0, 0, status.Error(codes.PermissionDenied, "user not authorized")
 }
 func (s *StatelessAuthenticator) GetAuthInfo(ctx context.Context) (userId int64, orgId int64) {
 	userId, orgId = 0, 0
@@ -250,32 +256,6 @@ func (s *StatelessAuthenticator) IsAuthenticated(ctx context.Context) (accessTok
 		ResponseTokenInjector(ctx, accessToken, refreshToken)
 	}
 	return
-}
-func (s *StatelessAuthenticator) CheckAuthority(ctx context.Context, authority string) (int64, int64, error) {
-	accessToken, isAuth := s.IsAuthenticated(ctx)
-	if !isAuth {
-		return 0, 0, status.Error(codes.Unauthenticated, "invalid access token")
-	}
-	ti, err := s.GetTokenInfo(accessToken)
-	if err != nil {
-		return 0, 0, status.Error(codes.Unauthenticated, "invalid access token")
-	}
-	if ti.GetExpiresAt().Before(time.Now()) {
-		return 0, 0, status.Error(codes.Unauthenticated, "invalid access token")
-	}
-	authorities := ti.GetAuthorities()
-	userId := ti.GetUserID()
-	orgId:= ti.GetOrgID()
-	target := strToAuthority[authority]
-	if len(authorities[target.groupAuthValue]) != len(target.authValue) {
-		return 0, 0, status.Error(codes.Unauthenticated, "UNAUTHENTICATED")
-	}
-	for i, v := range authorities[target.groupAuthValue] {
-		if v & target.authValue[i] == 0 {
-			return 0, 0, status.Error(codes.PermissionDenied, "user not authorized")
-		}
-	}
-	return userId, orgId, nil
 }
 func (s *StatelessAuthenticator) CheckAuthentication(ctx context.Context) error {
 	_, isAuth := s.IsAuthenticated(ctx)
