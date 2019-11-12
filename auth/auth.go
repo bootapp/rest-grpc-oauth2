@@ -110,12 +110,12 @@ func (s *StatelessAuthenticator) ScheduledFetchAuthorities(ctx context.Context) 
 	if err != nil {
 		return err
 	}
-	client := core.NewDalAuthServiceClient(conn)
+	client := core.NewDalSysAuthServiceClient(conn)
 	go func() {
 		scheduled := time.NewTimer(time.Second)
 		for range scheduled.C {
 			log.Println("refreshing authorities...")
-			authorities, err := client.ReadAuthorities(ctx, &core.ReadAuthoritiesReq{})
+			authorities, err := client.ReadSysAuthorities(ctx, &core.ReadSysAuthoritiesReq{})
 			if err != nil {
 				log.Println(err)
 			} else {
