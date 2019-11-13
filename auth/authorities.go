@@ -3,7 +3,6 @@ package auth
 type AuthorityGroup struct {
 	Id int64
 	Pid int64
-	Value int64
 	Name string
 }
 type Authority struct {

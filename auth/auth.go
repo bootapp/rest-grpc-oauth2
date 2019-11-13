@@ -38,20 +38,17 @@ func AuthorityEncode(authGroupIds []string, authorityKeys []string) (authorities
 		if authGroup.Pid == 0 {
 			continue
 		}
-		if _, ok := authorities[authGroup.Pid]; !ok {
-			authorities[authGroup.Pid] = make([]int64, 2)
+		if _, ok := authorities[authGroup.Id]; !ok {
+			authorities[authGroup.Id] = make([]int64, 1)
 		}
-		authorities[authGroup.Pid][0] |= authGroup.Value
 	}
 	for _, authKey := range authorityKeys {
 		authority := strToAuthority[authKey]
 		authGroup := authGroupMap[authority.GroupId]
-		if _, ok := authorities[authGroup.Pid]; !ok {
+		if _, ok := authorities[authGroup.Id]; !ok {
 			continue
 		}
-		if authGroup.Value & authorities[authGroup.Pid][0] != 0 {
-			authorities[authGroup.Pid][1] |= authority.Value
-		}
+		authorities[authGroup.Id][0] |= authority.Value
 	}
 	return
 }
@@ -120,8 +117,8 @@ func (s *StatelessAuthenticator) ScheduledFetchAuthorities(ctx context.Context) 
 				log.Println(err)
 			} else {
 				for _, authGroup:= range authorities.AuthorityGroups {
-					authGroupMap[authGroup.Id] = AuthorityGroup{ Id:authGroup.Id, Pid:authGroup.Pid,
-						Value:authGroup.Value, Name:authGroup.Name }
+					authGroupMap[authGroup.Id] = AuthorityGroup{
+						Id:authGroup.Id, Pid:authGroup.Pid, Name:authGroup.Name }
 				}
 				for _, auth := range authorities.Authorities {
 					strToAuthority[auth.Key] = Authority{Key:auth.Key, Value: auth.Value,
@@ -193,9 +190,9 @@ func (s *StatelessAuthenticator) CheckAuthority(ctx context.Context, authority s
 	if !ok {
 		return 0, 0, status.Error(codes.Unauthenticated, "invalid access token")
 	}
-	if targetAuthGroup.Value & authorities[targetAuthGroup.Pid][0] == targetAuthGroup.Value &&
-		targetAuth.Value & authorities[targetAuthGroup.Pid][1] == targetAuth.Value {
-		return ti.GetUserID(), ti.GetOrgID(), nil
+	if value, ok := authorities[targetAuthGroup.Id];
+		ok && value[0] & targetAuth.Value == targetAuth.Value {
+			return ti.GetUserID(), ti.GetOrgID(), nil
 	}
 	return 0, 0, status.Error(codes.PermissionDenied, "user not authorized")
 }
