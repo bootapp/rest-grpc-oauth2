@@ -32,7 +32,7 @@ func AuthorityEncode(authGroupIds []string, authorityKeys []string) (authorities
 		}
 		authGroup, ok := authGroupMap[groupId]
 		if !ok {
-			err = status.Error(codes.Unauthenticated, err1.Error())
+			err = status.Error(codes.Unauthenticated, "invalid authGroup")
 			return
 		}
 		if authGroup.Pid == 0 {
