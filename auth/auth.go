@@ -2,6 +2,7 @@ package auth
 
 import (
 	"context"
+	"fmt"
 	"github.com/bootapp/oauth2"
 	"github.com/bootapp/oauth2/generates"
 	"github.com/bootapp/rest-grpc-oauth2/auth/pb"
@@ -32,7 +33,7 @@ func AuthorityEncode(authGroupIds []string, authorityKeys []string) (authorities
 		}
 		authGroup, ok := authGroupMap[groupId]
 		if !ok {
-			err = status.Error(codes.Unauthenticated, "invalid authGroup")
+			err = status.Error(codes.Unauthenticated, fmt.Sprintf("invalid authGroup %d", groupId))
 			return
 		}
 		if authGroup.Pid == 0 {
