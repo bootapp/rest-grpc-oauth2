@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"github.com/bootapp/oauth2"
 	"github.com/bootapp/oauth2/generates"
-	"github.com/bootapp/rest-grpc-oauth2/auth/pb"
+	core "github.com/bootapp/rest-grpc-oauth2/auth/pb"
 	"github.com/dgrijalva/jwt-go"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
