@@ -195,7 +195,7 @@ func (s *StatelessAuthenticator) CheckAuthority(ctx context.Context, authority s
 		ok && value[0] & targetAuth.Value == targetAuth.Value {
 			return ti.GetUserID(), ti.GetOrgID(), nil
 	}
-	return 0, 0, status.Error(codes.PermissionDenied, "user not authorized")
+	return ti.GetUserID(), ti.GetOrgID(), status.Error(codes.PermissionDenied, "user not authorized")
 }
 func (s *StatelessAuthenticator) GetAuthInfo(ctx context.Context) (userId int64, orgId int64) {
 	userId, orgId = 0, 0
