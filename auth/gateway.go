@@ -92,7 +92,6 @@ func GatewayRequestCookieParser(_ context.Context, req *http.Request) (resMD met
 	}
 	return resMD
 }
-
 func TokenPassingInterceptor(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
 	if md, ok := metadata.FromIncomingContext(ctx); ok {
 		keys := md.Get(AccessTokenMdKey)

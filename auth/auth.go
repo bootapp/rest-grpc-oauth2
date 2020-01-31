@@ -214,7 +214,11 @@ func (s *StatelessAuthenticator) GetAuthInfo(ctx context.Context) (userId int64,
 	orgId = ti.GetOrgID()
 	return
 }
-
+func (s *StatelessAuthenticator) GetRemoteAddr(ctx context.Context) string {
+	md, _ := metadata.FromIncomingContext(ctx)
+	remoteAddr := FirstIncomingHeaderMdWithName(md, RemoteAddrMdKey)
+	return remoteAddr
+}
 func (s *StatelessAuthenticator) GetAuthInfoFromHttp(req *http.Request) (userId int64, orgId int64) {
 	userId, orgId = 0, 0
 	accessToken, err := req.Cookie(AccessTokenCookieKey)
