@@ -58,6 +58,7 @@ func GatewayResponseCookieAnnotator(ctx context.Context, response http.ResponseW
 	return nil
 }
 func GatewayRequestCookieParser(_ context.Context, req *http.Request) (resMD metadata.MD) {
+	resMD = metadata.Pairs(RemoteAddrMdKey, req.RemoteAddr)
 	var accessToken, refreshToken string
 	accessCookie, err := req.Cookie(AccessTokenCookieKey)
 	if err ==nil && accessCookie != nil {
@@ -76,7 +77,7 @@ func GatewayRequestCookieParser(_ context.Context, req *http.Request) (resMD met
 			var refreshed bool
 			accessToken, refreshToken, refreshed = authenticator.RefreshTokenIfNeeded(accessToken, refreshToken)
 			if refreshed {
-				resMD = metadata.Pairs(TokenRefreshed, "1")
+				resMD.Append(TokenRefreshed, "1")
 			}
 		} else {
 			log.Fatal("no oauth authenticator configured")
@@ -84,11 +85,7 @@ func GatewayRequestCookieParser(_ context.Context, req *http.Request) (resMD met
 	}
 
 	if accessToken != "" {
-		if resMD == nil {
-			resMD = metadata.Pairs(AccessTokenMdKey, accessToken)
-		} else {
-			resMD.Append(AccessTokenMdKey, accessToken)
-		}
+		resMD.Append(AccessTokenMdKey, accessToken)
 		if refreshToken != "" {
 			resMD.Append(RefreshTokenMdKey, refreshToken)
 		}
